@@ -1,59 +1,48 @@
-var slice = [].slice;
+var color = require('./helper/color'),
+    util = require('./helper/util');
 
-
-
-/**
- * simple uid generator
- * @type {Number}
- */
-var _uid = 0, tokenCache = {};
-function uid(cached){
-    _uid++;
-    if(cached){
-        tokenCache[typeof cached === 'string'? cached : _uid] = {type: _uid};
+var slice = [].slice,
+    _uid = 0,
+    tokenCache = {};
+    uid = function(cached){
+        _uid++;
+        if(cached){
+            tokenCache[typeof cached === 'string'? cached : _uid] = {type: _uid};
+        }
+        return _uid;
     }
-    return _uid;
-}
 
 
 
-/**
- * 剽窃自acorn(目前最快的JS in JS Parser)的做法, 只在需要时提供lineNumber
- * @return {[type]} [description]
- */
-function getLineInfo(input, offset){
-    // line下标从1开始
-    for (var line = 1, cur = 0;;) {
-      rLineBreak.lastIndex = cur;
-      var match = rLineBreak.exec(input);
-      // 当index小于offset继续进行匹配
-      if (match && match.index < offset) {
-        ++line;
-        cur = match.index + match[0].length;
-      } else break;
-    }
-    return {line: line, column: offset - cur};
-}
-// 判断某词是否在关键字列表中为关键字, regexp版
-function toAssert(str){
+// 判断某词是否在关键字列表中为关键字 (@deprecated, 有更快的版本)
+var toAssert = function(str){
     var arr = typeof str == "string" ? str.split(/\s+/) : str,
-        regexp = new RegExp("^(?:" + arr.join(" ") + ")$");
+        regexp = new RegExp("^(?:" + arr.join("|") + ")$");
 
     return function(word){
       return regexp.test(word);
     }
 }
 
+var toAssert2 = util.makePredicate;
 
 // create Token
 function createToken(type, val){
-    return tokenCache[type]    {type: type, val: val};
+    var token = tokenCache[type] || {type: type};
+    if(val) token.val = val;
+    return token;
 }
 
-/**
- * token types with uid
- * @type {[type]}
- */
+// Token Types
+// ===========================================
+
+exports.inspectToken = function(tokenType){
+    for(var i in exports){
+        if(typeof exports[i] === 'number' && exports[i] === tokenType) return i;
+    }
+}
+
+// BASE
 var EOF = exports.EOF = uid(true); // EOF
 var WS = exports.WS = uid(true); // WhiteSpce
 var NEWLINE = exports.NEWLINE = uid(true); // NEWLINE
@@ -63,8 +52,9 @@ var FLAG = exports.FLAG = uid(); // COMMENT
 var IDENT = exports.IDENT = uid(); // COMMENT
 var AT_KEYWORD = exports.AT_KEYWORD = uid(); // COMMENT
 var SELECTOR = exports.SELECTOR = uid(); // SELECTOR
-var RGBA = exports.RGBA = uid(); // RGBA
-var RGB = exports.RGB = uid(); // RGB
+// var RGBA = exports.RGBA = uid(); // RGBA
+// var RGB = exports.RGB = uid(); // RGB
+var COLOR = exports.COLOR = uid(); // RGB
 var DIMENSION = exports.DIMENSION = uid(); // DIMENSION
 
 // Punctuator
@@ -76,25 +66,36 @@ var BRACEL = exports.BRACEL = uid('('); // (
 var BRACER = exports.BRACER = uid(')'); // )
 var SEMICOLON = exports.SEMICOLON = uid(';'); // ;
 
-// NESS KEYWORD
+// AT KEYWORD
 
+var IMPORT = exports.IMPORT = uid('import'); // @import
+var PAGE = exports.PAGE = uid('page'); // @page
+var MEDIA = exports.MEDIA = uid('media'); // @media
+var FONT_FACE = exports.MEDIA = uid('font-face'); // @media
+var CHARSET = exports.MEDIA = uid('charset'); // @media
+
+var VARIABLE = exports.VARIABLE = uid(); // @var
+
+
+// NESS KEYWORD
 var IF = exports.IF = uid('IF'); // @if
 var THEN = exports.THEN = uid('THEN'); // @then
 var ELSE = exports.ELSE = uid('ELSE'); // @else
 
-// var FOR = exports.FOR = uid('FOR'); // @if
-// var BY = exports.BY = uid('BY'); // @then
-// var ELSE = exports.ELSE = uid('ELSE'); // @else
-
 // unit
 // UNIT http://www.w3.org/TR/css3-values/
-var isUnit = toAssert("% em ex ch rem vw vh vmin vmax cm mm in pt pc px deg grad rad turn s ms Hz kHz dpi dpcm dppx");
-// TODO
-var isCSSKeyword = toAssert("")
-// TODO
-var isNESSKeyword = toAssert("")
+var isUnit = toAssert2("% em ex ch rem vw vh vmin vmax cm mm in pt pc px deg grad rad turn s ms Hz kHz dpi dpcm dppx");
+// color keywords
 
-// FLEX SIMPLE 版, :)
+
+
+// alt keyword detect  @page   @import  @keyframe @media
+function alKeyword(val){
+    return tokenCache(val);
+}
+
+
+// FLEX simple version :) 
 var RULES = [
     {   //Space
         reg: /[ \t]+/,
@@ -111,47 +112,45 @@ var RULES = [
     {   //Comment
         reg: /\/\*([^\x00]+)\*\//,
         action: function(yytext, val){
-            return createToken(COMMENT, yytext);
+            return createToken(COMMENT, val);
         }
     },
     {
-        // @alt word
-        reg: /@([-\*_A-Za-z][-\w]*)/,
+        // @  alt word or variable
+        reg: /@([-_A-Za-z][-\w]*)/,
         action: function(yytext, val){
-            if(isAtKeyWord(val)){
-                return createToken(AT_KEYWORD)
-            }else if(isNes){
-                return createToken(NES_KEYWORD)
-            }
+            return tokenCache[val] || createToken(VARIABLE, val);
         }
     },
     {   //IDENT
         reg: /([-\*_A-Za-z][-\w]*)/,
-        action: function(yytext, val){
-            return createToken(IDENT, val)
+        action: function(yytext){
+            return createToken(IDENT, yytext);
         }
     },
     {   // DIMENSION NUMBER + UNIT
         //
-        reg: /(-?(?:\d+\.\d+ \d+))()?/,
+        reg: /(-?(?:\d+\.\d+|\d+))(\w*)?/,
         action: function(yytext, val, unit){
-            var token = createToken(UNIT, )
-            createToken()
+            if(unit && !isUnit(unit)){
+                this.error('Unexcept unit: "' + unit + '"');
+            }
+            var token = createToken(DIMENSION, yytext);
+            token.number = parseFloat(val);
+            token.unit = unit;
+            return token;
         }
     },
-    {   
-        reg: 
-    }
     {   // PUNCTUATORS
         reg: /([\{\}\(\);,:])/,
         action: function(yytext, punctuator){
             return tokenCache[punctuator]
         }
     },
-    {   // rgba, rgb,
+    {   // RGBA, RGB, 这里注意与selector的区分
         reg: /#([0-9a-f]{3} [0-9a-f]{6})(?![#*.\[:a-zA-Z])/,
         action: function(yytext, val){
-            return createToken(val.length === 3? RGB : RGBA, val);
+            var token = createToken(val.length === 3? RGB : RGBA, val);
         }
     },
     {   // String
@@ -160,9 +159,9 @@ var RULES = [
             return createToken(STRING, val)
         }
     },
-    {   // SELECTOR 模糊匹配，后期再再利用[nes选择器的parser进行解析](https://github.com/leeluolee/nes)进行parse
-        // 只有*，.home ,:first-child, [attr], #id 这几种可能的开头
-        reg: /[#*.\[:a-zA-Z][^\{\n\r\f,]+/,
+    {   // SELECTOR 模糊匹配，后期再利用[nes选择器的parser进行解析](https://github.com/leeluolee/nes)进行parse
+        // 只有*，.home ,:first-child, [attr], #id  > ~ + &这几种可能的开头
+        reg: /[&>~+#*.\[:a-zA-Z][^\{\n\r\f,]+/,
         action: function(yytext){
             return createToken(SELECTOR, yytext.trim())
         }
@@ -178,7 +177,7 @@ function setupRule(rules, host){
             reg = String(reg).slice(1, -1)
         }
         reg = new RegExp("^(?:" + reg + ")");
-        action = rule.action    null;
+        action = rule.action;
         regs.push(reg)
         actions.push(action)
     }
@@ -198,7 +197,7 @@ var cssKeyWord = "keyframe media page import";
 
 
 var rNewLine = /[\n\r\f]/;
-var rLineBreak = /\r\n [\n\r\f]/g;
+var rLineBreak = /\r\n|[\n\r\f]/g;
 var rIdentStart = /^[-a-zA-Z_]/;
 var rIdentVal = /^[-\w]/;
 
@@ -208,7 +207,7 @@ var rIdentVal = /^[-\w]/;
  * @return {Boolean}      [description]
  */
 var isWhiteSpace = function(char){
-    return char === '\t'    char === ' ';
+    return char === '\t' || char === ' ';
 }
 
 var isAtKeyWord = toAssert(nessKeyword + " " + cssKeyWord);
@@ -232,7 +231,7 @@ Tokenizer.prototype = {
     conditions:[],
     setInput: function(input, options){
         // @TODO: options
-        this.options = options    {};
+        this.options = options || {};
         //simplify newline token detect
         this.input = input.replace("\r\n", "\n"); 
         // matched input
@@ -313,22 +312,25 @@ Tokenizer.prototype = {
      */
     error: function(message, options){
         var message = this._traceError(message);
-        var error = new Error(message    "Lexical error");
+        var error = new Error(message || "Lexical error");
         throw error
     },
     _traceError: function(message){
         // TODO: 加上trace info
         return 'Lexical error on line ' + (this.lineno + 1) + 
-            (message    '. Unrecognized input.')
+            (message || '. Unrecognized input.')
     }
    
 
 }
 // 生成actionmap
+// -----------------------------------
 setupRule(RULES, Tokenizer.prototype)
 
 
-var tokenizer = exports.tokenize("\n\n#cda.classname, .m-class{height: 80px}")
+var tokenizer = exports.tokenize("@hello: green;\n\n#cda.classname, .m-class{height:/***/ 80px} @hello")
+
+console.log(tokenizer.lex().type === NEWLINE)
 console.log(tokenizer.lex().type === NEWLINE)
 console.log(tokenizer.lex().type === NEWLINE)
 console.log(tokenizer.lex().type === SELECTOR)
@@ -337,5 +339,7 @@ console.log(tokenizer.lex().type === SELECTOR)
 console.log(tokenizer.lex().type === PARENL)
 console.log(tokenizer.lex().type === IDENT)
 console.log(tokenizer.lex().type === COLON)
-console.log(tokenizer.lex().type === COLON)
-console.log(tokenizer.lex().type === BRACER)
+console.log(tokenizer.lex())
+console.log(tokenizer.lex().type === DIMENSION)
+console.log(tokenizer.lex().type === PARENR)
+console.log(exports.inspectToken(PARENR));

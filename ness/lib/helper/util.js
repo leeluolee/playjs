@@ -1,6 +1,6 @@
 // thx acorn.js http://marijnhaverbeke.nl/acorn/ 
 // the fastest javascript parser
-function makePredicate(words)  {
+exports.makePredicate = function(words)  {
     words = words.split(" ");
     var f = "", cats = [];
     out: for (var i = 0; i < words.length; ++i) {
@@ -37,4 +37,4 @@ function makePredicate(words)  {
       compareTo(words);
     }
     return new Function("str", f);
-  }
+}
