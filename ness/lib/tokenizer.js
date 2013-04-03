@@ -1,6 +1,8 @@
 var color = require('./helper/color'),
     util = require('./helper/util');
 
+
+// local var or util function
 var slice = [].slice,
     _uid = 0,
     tokenCache = {};
@@ -10,21 +12,21 @@ var slice = [].slice,
             tokenCache[typeof cached === 'string'? cached : _uid] = {type: _uid};
         }
         return _uid;
-    }
+    },
+    // detect keyword in word_list (@deprecated)
+    toAssert = function(str){
+        var arr = typeof str == "string" ? str.split(/\s+/) : str,
+            regexp = new RegExp("^(?:" + arr.join("|") + ")$");
+
+        return function(word){
+          return regexp.test(word);
+        }
+    },
+    // the more fast version
+    toAssert2 = util.makePredicate;
 
 
 
-// 判断某词是否在关键字列表中为关键字 (@deprecated, 有更快的版本)
-var toAssert = function(str){
-    var arr = typeof str == "string" ? str.split(/\s+/) : str,
-        regexp = new RegExp("^(?:" + arr.join("|") + ")$");
-
-    return function(word){
-      return regexp.test(word);
-    }
-}
-
-var toAssert2 = util.makePredicate;
 
 // create Token
 function createToken(type, val){
@@ -36,6 +38,7 @@ function createToken(type, val){
 // Token Types
 // ===========================================
 
+// insepectToken, get tokenName with TokenType(uid)
 exports.inspectToken = function(tokenType){
     for(var i in exports){
         if(typeof exports[i] === 'number' && exports[i] === tokenType) return i;
@@ -68,11 +71,16 @@ var SEMICOLON = exports.SEMICOLON = uid(';'); // ;
 
 // AT KEYWORD
 
-var IMPORT = exports.IMPORT = uid('import'); // @import
-var PAGE = exports.PAGE = uid('page'); // @page
-var MEDIA = exports.MEDIA = uid('media'); // @media
-var FONT_FACE = exports.MEDIA = uid('font-face'); // @media
-var CHARSET = exports.MEDIA = uid('charset'); // @media
+// var IMPORT = exports.IMPORT = uid('import'); // @import
+// var PAGE = exports.PAGE = uid('page'); // @page
+// var MEDIA = exports.MEDIA = uid('media'); // @media
+// var FONT_FACE = exports.MEDIA = uid('font-face'); // @media
+var AT_KEYWORD = exports.AT_KEYWORD = uid(); // @media
+var KEYFRAME = exports.KEYFRAME = uid('keyframe'); // @media
+
+var MIXIN = exports.MIXIN = uid('mixin'); // @media
+var EXTEND = exports.EXTEND = uid('extend'); // @media
+
 
 var VARIABLE = exports.VARIABLE = uid(); // @var
 
@@ -85,18 +93,28 @@ var ELSE = exports.ELSE = uid('ELSE'); // @else
 // unit
 // UNIT http://www.w3.org/TR/css3-values/
 var isUnit = toAssert2("% em ex ch rem vw vh vmin vmax cm mm in pt pc px deg grad rad turn s ms Hz kHz dpi dpcm dppx");
+var isAtKeyWord = toAssert2("keyframe media page import font-face")
+var isNessKeyWord = toAssert2("mixin extend")
 // color keywords
 
 
 
 // alt keyword detect  @page   @import  @keyframe @media
-function alKeyword(val){
-    return tokenCache(val);
+function atKeyword(val){
+    if(var === 'keyframe') return createToken(KEYFRAME)
+    return tokenCache[val];
 }
 
 
 // FLEX simple version :) 
 var RULES = [
+    {   
+        // EOF
+        reg: /$/,
+        action: function(){
+            return createToken(EOF)
+        }
+    },
     {   //Space
         reg: /[ \t]+/,
         action: function(){
@@ -119,7 +137,9 @@ var RULES = [
         // @  alt word or variable
         reg: /@([-_A-Za-z][-\w]*)/,
         action: function(yytext, val){
-            return tokenCache[val] || createToken(VARIABLE, val);
+            if(val === 'keyframe' || isNessKeyWord(val)) return tokenCache[val];
+            if(isAtKeyWord(val)) return createToken(AT_KEYWORD, val);
+            return createToken(VARIABLE, val);
         }
     },
     {   //IDENT
@@ -193,13 +213,7 @@ function setupRule(rules, host){
  * some RegExp
  */
 var nessKeyword = "mixin extend";
-var cssKeyWord = "keyframe media page import";
 
-
-var rNewLine = /[\n\r\f]/;
-var rLineBreak = /\r\n|[\n\r\f]/g;
-var rIdentStart = /^[-a-zA-Z_]/;
-var rIdentVal = /^[-\w]/;
 
 /**
  * detect WhiteSpace 
@@ -210,7 +224,6 @@ var isWhiteSpace = function(char){
     return char === '\t' || char === ' ';
 }
 
-var isAtKeyWord = toAssert(nessKeyword + " " + cssKeyWord);
 
 /**
  * exports function tokenize
@@ -288,24 +301,6 @@ Tokenizer.prototype = {
     popState:function(){
 
     },
-    // jump to absolute position
-    jump: function(pos){
-        this.pos = pos;
-        this.char = this.input.charAt(this.pos);
-    },
-    /**
-     * look around with num
-     * @param  {Number} num  
-     * @param  {[type]} back 
-     *         0: relative
-               1: absolute
-     */
-    touch: function(num, abs){
-        num = abs ? num : this.pos + num;
-        // TODO
-        // if(num < 0    num > this.length) return null;
-        return this.input.charAt(num)
-    },
     /**
      * [error description]
      * @return {[type]} [description]
@@ -328,18 +323,21 @@ Tokenizer.prototype = {
 setupRule(RULES, Tokenizer.prototype)
 
 
-var tokenizer = exports.tokenize("@hello: green;\n\n#cda.classname, .m-class{height:/***/ 80px} @hello")
+// var tokenizer = exports.tokenize("@hello: green;\n\n#cda.classname, .m-class{height:/***/ 80px} @hello")
 
-console.log(tokenizer.lex().type === NEWLINE)
-console.log(tokenizer.lex().type === NEWLINE)
-console.log(tokenizer.lex().type === NEWLINE)
-console.log(tokenizer.lex().type === SELECTOR)
-console.log(tokenizer.lex().type === COMMA)
-console.log(tokenizer.lex().type === SELECTOR)
-console.log(tokenizer.lex().type === PARENL)
-console.log(tokenizer.lex().type === IDENT)
-console.log(tokenizer.lex().type === COLON)
-console.log(tokenizer.lex())
-console.log(tokenizer.lex().type === DIMENSION)
-console.log(tokenizer.lex().type === PARENR)
-console.log(exports.inspectToken(PARENR));
+// console.log(tokenizer.lex().type === VARIABLE)
+// console.log(tokenizer.lex().type === COLON)
+// console.log(tokenizer.lex().type === IDENT)
+// console.log(tokenizer.lex().type === SEMICOLON)
+// console.log(tokenizer.lex().type === NEWLINE)
+// console.log(tokenizer.lex().type === NEWLINE)
+// console.log(tokenizer.lex().type === SELECTOR)
+// console.log(tokenizer.lex().type === COMMA)
+// console.log(tokenizer.lex().type === SELECTOR)
+// console.log(tokenizer.lex().type === PARENL)
+// console.log(tokenizer.lex().type === IDENT)
+// console.log(tokenizer.lex().type === COLON)
+// console.log(tokenizer.lex())
+// console.log(tokenizer.lex().type === DIMENSION)
+// console.log(tokenizer.lex().type === PARENR)
+// console.log(exports.inspectToken(PARENR));

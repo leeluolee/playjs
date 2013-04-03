@@ -12,248 +12,74 @@ var ness;
     ness = require('0');
 }({
     '0': function (require, module, exports, global) {
-        var tokenizer = require('1');
+        var tokenizer = null;
+        var parser = require('1');
         exports.tokenizer = tokenizer;
+        exports.parser = parser;
     },
     '1': function (require, module, exports, global) {
-        var color = require('2'), util = require('3');
-        var slice = [].slice, _uid = 0, tokenCache = {};
-        uid = function (cached) {
-            _uid++;
-            if (cached) {
-                tokenCache[typeof cached === 'string' ? cached : _uid] = { type: _uid };
-            }
-            return _uid;
+        var tk = null, tree = require('2'), color = require('3'), util = require('4');
+        var isColor = util.makePredicate('aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgrey darkgreen darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray grey green greenyellow honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgrey lightgreen lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen');
+        var isNessAtKeyword = util.makePredicate('if else then end mixin extend css');
+        exports.parse = function (input, options) {
+            return new Parser().parse(input, options);
         };
-        var toAssert = function (str) {
-            var arr = typeof str == 'string' ? str.split(/\s+/) : str, regexp = new RegExp('^(?:' + arr.join('|') + ')$');
-            return function (word) {
-                return regexp.test(word);
-            };
-        };
-        var toAssert2 = util.makePredicate;
-        function createToken(type, val) {
-            var token = tokenCache[type] || { type: type };
-            if (val)
-                token.val = val;
-            return token;
+        function Parser(input, options) {
         }
-        exports.inspectToken = function (tokenType) {
-            for (var i in exports) {
-                if (typeof exports[i] === 'number' && exports[i] === tokenType)
-                    return i;
-            }
-        };
-        var EOF = exports.EOF = uid(true);
-        var WS = exports.WS = uid(true);
-        var NEWLINE = exports.NEWLINE = uid(true);
-        var COMMENT = exports.COMMENT = uid();
-        var FLAG = exports.FLAG = uid();
-        var IDENT = exports.IDENT = uid();
-        var AT_KEYWORD = exports.AT_KEYWORD = uid();
-        var SELECTOR = exports.SELECTOR = uid();
-        var COLOR = exports.COLOR = uid();
-        var DIMENSION = exports.DIMENSION = uid();
-        var PARENL = exports.PARENL = uid('{');
-        var PARENR = exports.PARENR = uid('}');
-        var COMMA = exports.COMMA = uid(',');
-        var COLON = exports.COLON = uid(':');
-        var BRACEL = exports.BRACEL = uid('(');
-        var BRACER = exports.BRACER = uid(')');
-        var SEMICOLON = exports.SEMICOLON = uid(';');
-        var IMPORT = exports.IMPORT = uid('import');
-        var PAGE = exports.PAGE = uid('page');
-        var MEDIA = exports.MEDIA = uid('media');
-        var FONT_FACE = exports.MEDIA = uid('font-face');
-        var CHARSET = exports.MEDIA = uid('charset');
-        var VARIABLE = exports.VARIABLE = uid();
-        var IF = exports.IF = uid('IF');
-        var THEN = exports.THEN = uid('THEN');
-        var ELSE = exports.ELSE = uid('ELSE');
-        var isUnit = toAssert2('% em ex ch rem vw vh vmin vmax cm mm in pt pc px deg grad rad turn s ms Hz kHz dpi dpcm dppx');
-        function alKeyword(val) {
-            return tokenCache(val);
-        }
-        var RULES = [
-                {
-                    reg: /[ \t]+/,
-                    action: function () {
-                    }
-                },
-                {
-                    reg: /[\n\r\f]/,
-                    action: function () {
-                        return createToken(NEWLINE);
-                    }
-                },
-                {
-                    reg: /\/\*([^\x00]+)\*\//,
-                    action: function (yytext, val) {
-                        return createToken(COMMENT, val);
-                    }
-                },
-                {
-                    reg: /@([-_A-Za-z][-\w]*)/,
-                    action: function (yytext, val) {
-                        return tokenCache[val] || createToken(VARIABLE, val);
-                    }
-                },
-                {
-                    reg: /([-\*_A-Za-z][-\w]*)/,
-                    action: function (yytext) {
-                        return createToken(IDENT, yytext);
-                    }
-                },
-                {
-                    reg: /(-?(?:\d+\.\d+|\d+))(\w*)?/,
-                    action: function (yytext, val, unit) {
-                        if (unit && !isUnit(unit)) {
-                            this.error('Unexcept unit: "' + unit + '"');
-                        }
-                        var token = createToken(DIMENSION, yytext);
-                        token.number = parseFloat(val);
-                        token.unit = unit;
-                        return token;
-                    }
-                },
-                {
-                    reg: /([\{\}\(\);,:])/,
-                    action: function (yytext, punctuator) {
-                        return tokenCache[punctuator];
-                    }
-                },
-                {
-                    reg: /#([0-9a-f]{3} [0-9a-f]{6})(?![#*.\[:a-zA-Z])/,
-                    action: function (yytext, val) {
-                        var token = createToken(val.length === 3 ? RGB : RGBA, val);
-                    }
-                },
-                {
-                    reg: /(['"])([^\r\n\f]*)\1/,
-                    action: function (yytext, quote, val) {
-                        return createToken(STRING, val);
-                    }
-                },
-                {
-                    reg: /[&>~+#*.\[:a-zA-Z][^\{\n\r\f,]+/,
-                    action: function (yytext) {
-                        return createToken(SELECTOR, yytext.trim());
-                    }
-                }
-            ];
-        function setupRule(rules, host) {
-            var rule, reg, regs = [], actions = [];
-            for (var i = 0; i < rules.length; i++) {
-                rule = rules[i];
-                reg = rule.reg;
-                if (typeof reg !== 'string') {
-                    reg = String(reg).slice(1, -1);
-                }
-                reg = new RegExp('^(?:' + reg + ')');
-                action = rule.action;
-                regs.push(reg);
-                actions.push(action);
-            }
-            host.rules = regs;
-            host.actions = actions;
-        }
-        var nessKeyword = 'mixin extend';
-        var cssKeyWord = 'keyframe media page import';
-        var rNewLine = /[\n\r\f]/;
-        var rLineBreak = /\r\n|[\n\r\f]/g;
-        var rIdentStart = /^[-a-zA-Z_]/;
-        var rIdentVal = /^[-\w]/;
-        var isWhiteSpace = function (char) {
-            return char === '\t' || char === ' ';
-        };
-        var isAtKeyWord = toAssert(nessKeyword + ' ' + cssKeyWord);
-        exports.tokenize = function (input, options) {
-            return new Tokenizer(input, options);
-        };
-        function Tokenizer(input, options) {
-            this.setInput(input, options);
-        }
-        Tokenizer.prototype = {
-            constructor: Tokenizer,
-            conditions: [],
-            setInput: function (input, options) {
-                this.options = options || {};
-                this.input = input.replace('\r\n', '\n');
-                this.matched = '';
-                this.remained = this.input;
-                this.length = this.input.length;
-                this.lineno = 0;
-                this.offset = 0;
+        Parser.prototype = {
+            parse: function (input, options) {
+                this.tokenizer = tk.tokenize(input, options);
+                this.tokens = [];
+                this.next();
+                return this.topLevel();
             },
-            lex: function () {
-                var token = this.next();
-                if (typeof token !== 'undefined') {
-                    return token;
-                } else {
-                    return this.lex();
-                }
+            error: function (msg) {
+                throw Error(msg);
             },
             next: function () {
-                var tmp, index, action, token, lines, rules = this.rules, actions = this.actions, length = rules.length;
-                for (var i = 0; i < length; i++) {
-                    tmp = this.remained.match(rules[i]);
-                    if (tmp) {
-                        index = i;
-                        break;
-                    }
+                this.token = this.tokenizer.lex();
+            },
+            advance: function (tokenType, val) {
+                if (this.token.type !== tokenType || val && this.token.val !== val) {
+                    this.error('expect ' + this.tokenizer.inspectToken(tokenType) + ', got the type:' + this.tokenizer.inspectToken(this.token.type));
                 }
-                if (tmp) {
-                    lines = tmp[0].match(/(?:\r\n? \n).*/g);
-                    if (lines)
-                        this.lineno += lines.length;
-                    action = actions[index];
-                    token = action.apply(this, tmp);
-                    this.remained = this.remained.slice(tmp[0].length);
-                    if (token && token.type) {
-                        return token;
-                    }
-                } else {
-                    this.error();
+                this.next();
+            },
+            ignore: function (tokenType, val) {
+                if (this.token.type !== tokenType || val && this.token.val !== val) {
+                    this.next();
                 }
             },
-            pushState: function (condition) {
+            topLevel: function () {
+                var node = new tree.ProgramNode();
+                while (this.token.type !== tk.EOF) {
+                    console.log(tk.inspectToken(this.token.type), tk.EOF);
+                    node.body.push(this.stmt());
+                }
+                return node;
             },
-            popState: function () {
+            stmt: function () {
+                console.log('stmt');
+                var tokenType = this.token.type;
+                this.next();
             },
-            jump: function (pos) {
-                this.pos = pos;
-                this.char = this.input.charAt(this.pos);
+            rule: function () {
             },
-            touch: function (num, abs) {
-                num = abs ? num : this.pos + num;
-                return this.input.charAt(num);
-            },
-            error: function (message, options) {
-                var message = this._traceError(message);
-                var error = new Error(message || 'Lexical error');
-                throw error;
-            },
-            _traceError: function (message) {
-                return 'Lexical error on line ' + (this.lineno + 1) + (message || '. Unrecognized input.');
+            definition: function () {
             }
         };
-        setupRule(RULES, Tokenizer.prototype);
-        var tokenizer = exports.tokenize('@hello: green;\n\n#cda.classname, .m-class{height:/***/ 80px} @hello');
-        console.log(tokenizer.lex().type === NEWLINE);
-        console.log(tokenizer.lex().type === NEWLINE);
-        console.log(tokenizer.lex().type === NEWLINE);
-        console.log(tokenizer.lex().type === SELECTOR);
-        console.log(tokenizer.lex().type === COMMA);
-        console.log(tokenizer.lex().type === SELECTOR);
-        console.log(tokenizer.lex().type === PARENL);
-        console.log(tokenizer.lex().type === IDENT);
-        console.log(tokenizer.lex().type === COLON);
-        console.log(tokenizer.lex());
-        console.log(tokenizer.lex().type === DIMENSION);
-        console.log(tokenizer.lex().type === PARENR);
-        console.log(exports.inspectToken(PARENR));
+        console.log(exports.parse('@height:80px;'));
     },
     '2': function (require, module, exports, global) {
+        exports.ProgramNode = function ProgramNode() {
+            this.body = [];
+        };
+        exports.AssignNode = function () {
+        };
+        exports.RuleListNode = function () {
+        };
+    },
+    '3': function (require, module, exports, global) {
         'use strict';
         var Color = module.exports = function () {
                 var str = 'string', Color = function Color(r, g, b, a) {
@@ -612,7 +438,7 @@ var ness;
             }
         }());
     },
-    '3': function (require, module, exports, global) {
+    '4': function (require, module, exports, global) {
         exports.makePredicate = function (words) {
             words = words.split(' ');
             var f = '', cats = [];
