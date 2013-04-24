@@ -1,21 +1,43 @@
 // program Node (root toplevel)
-exports.ProgramNode = function(){
+exports.Program = function Program(){
     this.body = [];
 }
 
-// variable Node
-exports.AssignNode = function(){
+//  选择器列表
+exports.SelectorList = function SelectorList(){
+    this.list = [];
+}
 
+// 复合选择器
+exports.ComplexSelector = function ComplexSelector(){
+
+}
+
+// 复合选择器
+exports.CompoundSelector = function CompoundSelector(){
+    this.lists = [];
+}
+
+// 简单选择器
+exports.SimpleSelector = function SimpleSelector(){
+    
 }
 
 // mixin Node
-exports.RuleListNode = function(){
+exports.RuleList = function RuleList(){
 
 }
 
+exports.RuleSet = function RuleSet(){
 
+}
+
+// variable Node
+exports.Assign = function Assign(){
+
+}
 // module Node
-exports.ExpressionNode = function(){
+exports.Expression = function Expression(){
 
 }
 

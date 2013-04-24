@@ -119,6 +119,7 @@ function atKeyword(val){
 
 var $rules = [];
 var $links = {};
+
 var addRules = tokenizer.addRules = function(rules){
     $rules = $rules.concat(rules)
     var rule, reg, state, link, retain;
@@ -137,6 +138,8 @@ var addRules = tokenizer.addRules = function(rules){
 }
 
 
+var cleanReg
+
 
 // addRULEs;
 addRules([
@@ -148,14 +151,14 @@ addRules([
         }
     },
     {   //NEWLINE
-        regexp: /[\n\r\f][ \t]*/,
+        regexp: /(?:\r\n|[\n\r\f])[ \t]*/,
         action: function(){
             return 'NEWLINE';
         }
     },
   
     {   //Comment
-        regexp: /\/\*([^\x00]+)\*\//,
+        regexp: /\/\*([^\x00]+?)\*\//,
         action: function(yytext, comment){
             this.yyval = comment;
             return 'COMMENT';
@@ -209,6 +212,20 @@ addRules([
             return 'PSEUDO_CLASS';
         }
     },
+    {   // pesudo-element
+        regexp: "::([\\w\\u00A1-\\uFFFF-]+)",
+        action: function(yytext){
+            this.yyval = yytext;
+            return 'PSEUDO_ELEMENT';
+        }
+    },
+    {   // attribute   [title=haha]
+        regexp: "\\[\\s*(?:[\\w\\u00A1-\\uFFFF-]+)(?:([*^$|~!]?=)[\'\"]?(?:[^\'\"\\[]+)[\'\"]?)?\\s*\\]",
+        action: function(yytext){
+            this.yyval = yytext;
+            return 'ATTRIBUTE';
+        }
+    },
 
     {   // RGBA, RGB, 这里注意与selector的区分
         // regexp: /#([0-9a-f]{3} [0-9a-f]{6})(?![#\*.\[:a-zA-Z])/,
@@ -222,13 +239,13 @@ addRules([
             return 'HASH';
         }
     },
-    {
-        regexp: /\.([-\w\u0080-\uffff]+)/,
-        action: function(yytext){
-            this.yyval = yytext
-            return 'CLASS';
-        }
-    },
+    // {
+    //     regexp: /\.([-\w\u0080-\uffff]+)/,
+    //     action: function(yytext){
+    //         this.yyval = yytext
+    //         return 'CLASS';
+    //     }
+    // },
     {
         // attribute
         regexp: /\.([-\w\u0080-\uffff]+)/,
@@ -252,9 +269,8 @@ addRules([
     },  
     {   
         // operator or connect || ~>+   
-        regexp: /[ \t]*((?:[>=<!]?=)|[-~!+*\/])[ \t]*/,
+        regexp: /[ \t]*((?:[>=<!]?=)|[-&><~!+*\/])[ \t]*/,
         action: function(yytext, op){
-            console.log('operator')
             return op;
         }
     },  
@@ -263,15 +279,17 @@ addRules([
         action: function(){
             return 'WS';
         }
-    },
-    {   // SELECTOR 模糊匹配，后期再利用[nes选择器的parser进行解析](https://github.com/leeluolee/nes)进行parse
-        // 只有*，.home ,:first-child, [attr], #id  > ~ + &这几种可能的开头
-        regexp: /[^{\n\r\f,]+/,
-        action: function(yytext){
-            this.yyval = yytext;
-            return 'SELECTOR_SEP';
-        }
     }
+    // {   // SELECTOR 模糊匹配，后期再利用[nes选择器的parser进行解析](https://github.com/leeluolee/nes)进行parse
+    //     // 只有*，.home ,:first-child, [attr], #id  > ~ + &这几种可能的开头
+    //     regexp: /[^{\n\r\f,]+/,
+    //     action: function(yytext){
+    //         this.yyval = yytext;
+    //         return 'SELECTOR_SEP';
+    //     }
+    // }
+    // sub state 
+    // --------------------------------
 ]);
 
 
@@ -293,7 +311,7 @@ Tokenizer.prototype = {
         // @TODO: options
         this.options = options || {};
         //simplify newline token detect
-        this.input = input.replace("\r\n", "\n"); 
+        this.input = input
         // remained input
         this.remained = this.input;
         this.length = this.input.length;
@@ -329,7 +347,7 @@ Tokenizer.prototype = {
             if(tmp) break;
         }
         if(tmp){
-            lines = tmp[0].match(/(?:\r\n?|\n).*/g);
+            lines = tmp[0].match(/(?:\r\n|[\n\r\f]).*/g);
             if(lines) this.lineno += lines.length;
             action = rule.action;
             tokenType = action.apply(this, tmp);

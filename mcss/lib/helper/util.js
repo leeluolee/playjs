@@ -1,6 +1,8 @@
 // thx acorn.js http://marijnhaverbeke.nl/acorn/ 
 exports.makePredicate = function(words)  {
-    words = words.split(" ");
+    if(typeof words === 'string'){
+      words = words.split(" ");
+    }
     var f = "", cats = [];
     out: for (var i = 0; i < words.length; ++i) {
       for (var j = 0; j < cats.length; ++j)
@@ -36,4 +38,21 @@ exports.makePredicate = function(words)  {
       compareTo(words);
     }
     return new Function("str", f);
+}
+
+exports.makePredicate2 = function(words){
+  if(typeof words !== 'string'){
+    words = words.join(' ');
+  }
+  return function(word){
+    return (~words.indexOf(word))
+  }
+}
+
+exports.perf = function(fn, times, args){
+  var date = +new Date;
+  for(var i = 0; i < times; i++){
+      fn.apply(this, args || []);
+  }
+  return +new Date - date;
 }
