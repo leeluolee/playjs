@@ -35,14 +35,26 @@ Parser.prototype = {
         // Temporarily ll(1) parser
         this.lookahead = null;
         this.next();
-        this.states = [];
+        this.states = ['accept'];
+        this.state='accept';
         return this.topLevel();        
     },
     error: function(msg){
        throw Error(msg); 
     },
     next: function(){
+        var next = this.tokenizer.lex();
         this.lookahead = this.tokenizer.lex();
+    },
+    // TODO:
+    pushState:function(condition){
+        this.states.push(condition);
+        this.state = condition;
+    },
+    // TODO:
+    popState:function(){
+        this.states.pop();
+        this.state = this.states[this.states.length-1];
     },
     match: function(tokenType, val){
         var ahead = this.ll();

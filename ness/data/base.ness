@@ -1,7 +1,0 @@
-
-@baseBackgroundColor: hello
-
-
-.m-modle{
-   background: @baseBackgroundColor 
-}

@@ -69,24 +69,6 @@ exports.gen = function(){
   // ##2. Parser
   // 
 
-function gen(rules){
-    var links = {},
-        rules = {},
-        TRUNK = null,
-        remain = input,
-        TRUNK = TRUNK;
-
-    return {
-        on: function(){
-
-        },
-        parse: function(){
-
-            while (remain != (remain = remain.replace(TRUNK, this._process.bind(this)))) {}
-        }
-    }
-
-}
 
 
   function Parser(opts) {

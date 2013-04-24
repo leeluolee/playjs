@@ -20,20 +20,21 @@ test = () ->
 
 build = () ->
   wrup = do require "wrapup"
-  wrup.require("ness", __dirname + "/lib/index.js")
+  wrup.require("mcss", __dirname + "/lib/browser.js")
     .options(
       # globalize: info.name
       # compress: false
-      sourceMap: __dirname + "/dist/sourceMap.js"
+      # sourceMap: __dirname + "/dist/sourceMap.js"
     ).up (err, source) -> 
       fs.writeFile path.join(__dirname, "dist/#{info.name}-#{info.version}.js"), source, (err) ->
         if err 
           console.error(err)
         else 
           console.log 'build complele'
+  
 
 
-task 'doc', 'Generate annotated source code with Docco', ()->
+task 'doc', 'Generate annotated source code with Docco', ->
   docco = exec 'docco lib/*.js', (err) ->
     throw err if err
   docco.stdout.on 'data', (data) -> console.log data.toString()

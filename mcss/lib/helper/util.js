@@ -1,5 +1,4 @@
 // thx acorn.js http://marijnhaverbeke.nl/acorn/ 
-// the fastest javascript parser
 exports.makePredicate = function(words)  {
     words = words.split(" ");
     var f = "", cats = [];

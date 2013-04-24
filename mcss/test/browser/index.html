@@ -3,7 +3,7 @@
     <title>Example Test Suite</title>
     <link rel="stylesheet" href="../vendor/nodeunit.css" type="text/css" />
     <script src="../vendor/nodeunit.js"></script>
-    <script src="../../dist/ness-0.0.1.js"></script>
+    <script src="../../dist/mcss-0.0.1.js"></script>
     <script src="../vendor/less.js"></script>
     <script src="../specs/test-tokenizer.js"></script>
     </head>
@@ -15,11 +15,6 @@
         'tokenizer': tokenizer
       });
 
-parser.parse(text, function (err, tree) {
-    if (err) { return console.error(err) }
-    console.log(tree)
-    window.tree = tree;
-});
 
     </script>
   </body>

@@ -1,15 +1,15 @@
-var color = require('./helper/color'),
-    util = require('./helper/util');
+var util = require('./helper/util');
 
 
 // local var or util function
 var slice = [].slice,
     _uid = 0,
+    debug = true,
     tokenCache = {};
-    uid = function(cached){
+    uid = function(type, cached){
         _uid++;
         if(cached){
-            tokenCache[typeof cached === 'string'? cached : _uid] = {type: _uid};
+            tokenCache[type] = {type: _uid};
         }
         return _uid;
     },
@@ -27,78 +27,85 @@ var slice = [].slice,
 
 
 
+// tokenizer function
+var tokenizer = module.exports = function(input, options){
+    return new Tokenizer(input, options);
+}
+
 
 // create Token
 function createToken(type, val){
-    var token = tokenCache[type] || {type: type};
-    if(val) token.val = val;
+    if(!val){
+        tokenCache[type] = {type: type}
+    }
+    // TODO remove
+    var token = tokenCache[type] || {type: type, val: val}
     return token;
 }
 
 // Token Types
 // ===========================================
 
-// insepectToken, get tokenName with TokenType(uid)
-exports.inspectToken = function(tokenType){
-    for(var i in exports){
-        if(typeof exports[i] === 'number' && exports[i] === tokenType) return i;
-    }
-}
+// // inspectToken, get tokenName with TokenType(uid)
+// tokenizer.inspect = function(tokenType){
+//     var typeType = tokenType.type || tokenType;
+//     for(var i in tokenizer){
+//         if(typeof tokenizer[i] === 'number' && tokenizer[i] === tokenType) return i;
+//     }
+// }
 
-// BASE
-var EOF = exports.EOF = uid(true); // EOF
-var WS = exports.WS = uid(true); // WhiteSpce
-var NEWLINE = exports.NEWLINE = uid(true); // NEWLINE
-var COMMENT = exports.COMMENT = uid(); // COMMENT
+// // BASE
+// var EOF = tokenizer.EOF
+// var WS = tokenizer.WS
+// var NEWLINE = tokenizer.NEWLINE
+// var COMMENT = tokenizer.COMMENT
 
-var IMPORTANT = exports.IMPORTANT = uid(true); // COMMENT
-var IDENT = exports.IDENT = uid(); // COMMENT
-var AT_KEYWORD = exports.AT_KEYWORD = uid(); // COMMENT
-var SELECTOR = exports.SELECTOR = uid(); // SELECTOR
-// var RGBA = exports.RGBA = uid(); // RGBA
-// var RGB = exports.RGB = uid(); // RGB
-var COLOR = exports.COLOR = uid(); // RGB
-var DIMENSION = exports.DIMENSION = uid(); // DIMENSION
+// var IMPORTANT = tokenizer.IMPORTANT
+// var IDENT = tokenizer.IDENT
+// var AT_KEYWORD = tokenizer.AT_KEYWORD
+// var SELECTOR = tokenizer.SELECTOR
+// // var RGBA = tokenizer.RGBA
+// // var RGB = tokenizer.RGB
+// var COLOR = tokenizer.COLOR
+// var DIMENSION = tokenizer.DIMENSION
 
-// Punctuator
-var PARENL = exports.PARENL = uid('{'); // {
-var PARENR = exports.PARENR = uid('}'); // }
-var COMMA = exports.COMMA = uid(',');   // ,
-var BRACEL = exports.BRACEL = uid('('); // (
-var BRACER = exports.BRACER = uid(')'); // )
-var SEMICOLON = exports.SEMICOLON = uid(';'); // ;
-var BIT_AND = exports.BIT_AND = uid('&'); // ;
-// beacuseof the pesudoSelector
-var COLON = exports.COLON = uid(true);   // :
-// AT KEYWORD
+// // Punctuator
+// var PARENL = tokenizer.PARENL
+// var PARENR = tokenizer.PARENR
+// var COMMA = tokenizer.COMMA
+// var BRACEL = tokenizer.BRACEL
+// var BRACER = tokenizer.BRACER
+// var SEMICOLON = tokenizer.SEMICOLON
+// var BIT_AND = tokenizer.BIT_AND
+// // beacuseof the pesudoSelector
+// var COLON = tokenizer.COLON
+// // AT KEYWORD
 
-// var IMPORT = exports.IMPORT = uid('import'); // @import
-// var PAGE = exports.PAGE = uid('page'); // @page
-// var MEDIA = exports.MEDIA = uid('media'); // @media
-// var FONT_FACE = exports.MEDIA = uid('font-face'); // @media
-var AT_KEYWORD = exports.AT_KEYWORD = uid(); // @media
-var DIRECTIVE = exports.DIRECTIVE = uid(); // @media
-var KEYFRAME = exports.KEYFRAME = uid('keyframe'); // @media
-
-
-var MIXIN = exports.MIXIN = uid('mixin'); // @media
-var EXTEND = exports.EXTEND = uid('extend'); // @media
+// // var IMPORT = tokenizer.IMPORT
+// // var PAGE = tokenizer.PAGE
+// // var MEDIA = tokenizer.MEDIA
+// // var FONT_FACE = tokenizer.MEDIA
+// var AT_KEYWORD = tokenizer.AT_KEYWORD
+// var DIRECTIVE = tokenizer.DIRECTIVE
+// var KEYFRAME = tokenizer.KEYFRAME
 
 
-var VARIABLE = exports.VARIABLE = uid(); // @var
+// var MIXIN = tokenizer.MIXIN
+// var EXTEND = tokenizer.EXTEND
 
 
-// NESS KEYWORD
-var IF = exports.IF = uid('IF'); // @if
-var THEN = exports.THEN = uid('THEN'); // @then
-var VAR = exports.THEN = uid('THEN'); // @then
-var ELSE = exports.ELSE = uid('ELSE'); // @else
+// var VARIABLE = tokenizer.VARIABLE
 
-// unit
-// UNIT http://www.w3.org/TR/css3-values/
+
+// // NESS KEYWORD
+// var IF = tokenizer.IF
+// var THEN = tokenizer.THEN
+// var VAR = tokenizer.THEN
+// var ELSE = tokenizer.ELSE
+
 var isUnit = toAssert2("% em ex ch rem vw vh vmin vmax cm mm in pt pc px deg grad rad turn s ms Hz kHz dpi dpcm dppx");
 var isAtKeyWord = toAssert2("keyframe media page import font-face")
-var isNessKeyWord = toAssert2("mixin extend")
+var isNessKeyWord = toAssert2("mixin extend if each")
 // color keywords
 
 
@@ -110,150 +117,178 @@ function atKeyword(val){
 }
 
 
-// FLEX simple version :) 
-var RULES = [
+var $rules = [];
+var $links = {};
+var addRules = tokenizer.addRules = function(rules){
+    $rules = $rules.concat(rules)
+    var rule, reg, state, link, retain;
+
+    for(var i = 0; i< $rules.length; i++){
+        rule = $rules[i];
+        reg = typeof rule.regexp !== 'string'? String(rule.regexp).slice(1, -1): rule.regexp;
+        if(!~reg.indexOf("^(?")){
+            rule.regexp = new RegExp("^(?:" + reg + ")");
+        }
+        state = rule.state || 'init';
+        link = $links[state] || ($links[state] = []);
+        link.push(i);
+    }
+    return this;
+}
+
+
+
+// addRULEs;
+addRules([
     {   
         // EOF
-        reg: /$/,
+        regexp: /$/,
         action: function(){
-            return createToken(EOF)
-        }
-    },
-    {   //Space
-        reg: /[ \t]+/,
-        action: function(){
-            /* skip white space */
+            return 'EOF';
         }
     },
     {   //NEWLINE
-        reg: /[\n\r\f]/,
+        regexp: /[\n\r\f][ \t]*/,
         action: function(){
-            return createToken(NEWLINE);
+            return 'NEWLINE';
         }
     },
+  
     {   //Comment
-        reg: /\/\*([^\x00]+)\*\//,
-        action: function(yytext, val){
-            return createToken(COMMENT, val);
+        regexp: /\/\*([^\x00]+)\*\//,
+        action: function(yytext, comment){
+            this.yyval = comment;
+            return 'COMMENT';
         }
     },
     {
         // @  alt word or variable
-        reg: /@([-_A-Za-z][-\w]*)/,
+        regexp: /@([-_A-Za-z][-\w]*)/,
         action: function(yytext, val){
-            if(val === 'keyframe' || isNessKeyWord(val)) return tokenCache[val];
-            if(isAtKeyWord(val)) return createToken(AT_KEYWORD, val);
-            return createToken(VARIABLE, val);
+            if(isNessKeyWord(val) || isAtKeyWord(val)){
+                return val.toUpperCase();
+            }else{
+                this.error('Unrecognized @ word')
+            }
         }
     },
     {   //IDENT
-        reg: /([-\*_A-Za-z][-\w]*)/,
+        regexp: /([\$_A-Za-z][-\w]*)/,
         action: function(yytext){
-            return createToken(IDENT, yytext);
+            this.yyval = yytext;
+            return 'IDENT';
         }
     },
     {   //!important
-        reg: /!important/,
+        regexp: /![ \t]*important/,
         action: function(yytext){
-            return createToken(IMPORTANT);
+            return 'IMPORTANT';
         }
     },
     {   // DIMENSION NUMBER + UNIT
         //
-        reg: /(-?(?:\d+\.\d+|\d+))(\w*)?/,
+        regexp: /(-?(?:\d+\.\d+|\d+))(\w*)?/,
         action: function(yytext, val, unit){
             if(unit && !isUnit(unit)){
                 this.error('Unexcept unit: "' + unit + '"');
             }
-            var token = createToken(DIMENSION, yytext);
-            token.number = parseFloat(val);
-            token.unit = unit;
-            return token;
+            this.yyval = {number: parseFloat(val), unit: unit};
+            return 'DIMENSION'
         }
     },
-    {   // PUNCTUATORS
-        reg: /([\{\}\(\);,:])/,
-        action: function(yytext, punctuator){
-            return tokenCache[punctuator]
+    {   // pesudo-class
+        regexp: ":([\\w\\u00A1-\\uFFFF-]+)" + //伪类名
+            "(?:\\(" + //括号开始
+            "([^\\(\\)]*" + //第一种无括号
+            "|(?:" + //有括号(即伪类中仍有伪类并且是带括号的)
+            "\\([^\\)]+\\)" + //括号部分
+            "|[^\\(\\)]*" + ")+)" + //关闭有括号
+            "\\))?",
+        action: function(yytext){
+            this.yyval = yytext;
+            return 'PSEUDO_CLASS';
+        }
+    },
+
+    {   // RGBA, RGB, 这里注意与selector的区分
+        // regexp: /#([0-9a-f]{3} [0-9a-f]{6})(?![#\*.\[:a-zA-Z])/,
+        // action: function(yytext, val){
+        //     this.yyval = val;
+        //     return val.length === 3? 'RGB' : 'RGBA';
+        // }
+        regexp: /#([-\w\u0080-\uffff]+)/,
+        action: function(yytext, val){
+            this.yyval = yytext;
+            return 'HASH';
         }
     },
     {
-        reg: /:/,
-        action: function(){
-            return createToken()
+        regexp: /\.([-\w\u0080-\uffff]+)/,
+        action: function(yytext){
+            this.yyval = yytext
+            return 'CLASS';
         }
-    }
-    {   // RGBA, RGB, 这里注意与selector的区分
-        reg: /#([0-9a-f]{3} [0-9a-f]{6})(?![#\*.\[:a-zA-Z])/,
-        action: function(yytext, val){
-            var token = createToken(val.length === 3? RGB : RGBA, val);
+    },
+    {
+        // attribute
+        regexp: /\.([-\w\u0080-\uffff]+)/,
+        action: function(yytext){
+            this.yyval = yytext
+            return 'CLASS';
         }
     },
     {   // String
-        reg: /(['"])([^\r\n\f]*)\1/,
+        regexp: /(['"])([^\r\n\f]*)\1/,
         action: function(yytext, quote, val){
-            return createToken(STRING, val)
+            this.yyval = val.trim();
+            return 'STRING';
+        }
+    },
+    {   // PUNCTUATORS
+        regexp: /([{}();,:])[\t ]*/,
+        action: function(yytext, punctuator){
+            return punctuator;
+        }
+    },  
+    {   
+        // operator or connect || ~>+   
+        regexp: /[ \t]*((?:[>=<!]?=)|[-~!+*\/])[ \t]*/,
+        action: function(yytext, op){
+            console.log('operator')
+            return op;
+        }
+    },  
+    {   //Space
+        regexp: /[ \t]+/,
+        action: function(){
+            return 'WS';
         }
     },
     {   // SELECTOR 模糊匹配，后期再利用[nes选择器的parser进行解析](https://github.com/leeluolee/nes)进行parse
         // 只有*，.home ,:first-child, [attr], #id  > ~ + &这几种可能的开头
-        reg: /[&>~+#*.\[:a-zA-Z][^\{\n\r\f,]+/,
+        regexp: /[^{\n\r\f,]+/,
         action: function(yytext){
-            return createToken(SELECTOR, yytext.trim())
+            this.yyval = yytext;
+            return 'SELECTOR_SEP';
         }
     }
-]
-
-function LexerGen = function(){
-
-}
-
-
-function setupRule(rules, host){
-    var rule, reg, regs = [], actions=[];
-    for(var i = 0; i< rules.length; i++){
-        rule = rules[i];
-        reg = rule.reg;
-        if(typeof reg !== 'string'){
-            reg = String(reg).slice(1, -1)
-        }
-        reg = new RegExp("^(?:" + reg + ")");
-        action = rule.action;
-        regs.push(reg)
-        actions.push(action)
-    }
-    // 存放regexp
-    host.rules = regs;
-    host.actions = actions;
-}
-
+]);
 
 
 
 /**
- * some RegExp
+ * Tokenizer Class
+ * @param {[type]} input   [description]
+ * @param {[type]} options [description]
  */
-var nessKeyword = "mixin extend";
-
-
-/**
- * exports function tokenize
- * @param  {String} input   
- * @param  {Object} options @TODO
- * @return {Tokenizer}
- */
-exports.tokenize = function(input, options){
-    return new Tokenizer(input, options);
-}
-
 function Tokenizer(input, options){
-    this.setInput(input, options)
+    if(input) this.setInput(input, options)
 }
+
 
 
 Tokenizer.prototype = {
     constructor: Tokenizer,
-    conditions:[],
     setInput: function(input, options){
         // @TODO: options
         this.options = options || {};
@@ -261,52 +296,13 @@ Tokenizer.prototype = {
         this.input = input.replace("\r\n", "\n"); 
         // remained input
         this.remained = this.input;
-
         this.length = this.input.length;
         // line number @TODO:
-        this.lineno = 0;
-        this.offset = 0;
+        this.lineno = 1;
 
-        // 存放规则
-        this.rules = [];
-        this.links = {};
-        // this.rules = {'init':[]};
-        // // 存放参数对应
-        // this.links = {'init':[]};
-        // // 存放trunks
-        // this.trunks = {'init':[]};
+        this.states = ['init'];
         this.state = 'init';
-    },
-    on: function(rules){
-        var rule, reg;
-        for(var i = 0; i< rules.length; i++){
-            rule = rules[i];
-            reg = rule.regexp;
-
-            if (typeof reg !== "string") {//means regexp
-                rule.regexp = reg.toString().slice(1, -1)
-            }
-
-            this.rules.push(rule);
-
-            this.rules.push(rule);
-            this._setup();
-        }
         return this;
-    },
-    _setup: function(){
-        var rules = this.rules,
-            links = this.links = {},
-            rule, reg, state, link;
-        for(var i = 0; i< rules.length; i++){
-            rule = rules[i];
-            reg = rule.regexp;
-            state = rule.state || 'init';
-            link = (links[state] || links[state] = {table:[], trunks:[]});
-
-            link.trunks.push(reg);
-        }
-
     },
     // 依赖next
     lex: function(){
@@ -317,30 +313,30 @@ Tokenizer.prototype = {
           return this.lex();
         }
     },
+    // get the latest state
     next: function(){
-        var tmp, index, action, 
-            token, lines,
-            rules = this.rules,
-            actions = this.actions,
-            length = rules.length;
-
-        for(var i = 0; i < length; i++){
-            tmp = this.remained.match(rules[i]);
-            if(tmp) {
-              index = i;
-              break
-            }
+        var tmp, action, rule,
+            tokenType, lines,
+            state = this.state,
+            rules = $rules,
+            link = $links[state];
+        if(!link) throw Error('no state: ' + state + ' defined');
+        this.yyval = null;
+        var len = link.length;
+        for(var i = 0; i < len; i++){
+            var rule = $rules[link[i]];
+            tmp = this.remained.match(rule.regexp);
+            if(tmp) break;
         }
         if(tmp){
-            lines = tmp[0].match(/(?:\r\n? \n).*/g);
+            lines = tmp[0].match(/(?:\r\n?|\n).*/g);
             if(lines) this.lineno += lines.length;
-            action = actions[index];
-            token = action.apply(this, tmp);
+            action = rule.action;
+            tokenType = action.apply(this, tmp);
+
             this.remained = this.remained.slice(tmp[0].length);
 
-            if(token && token.type){
-                return token;
-            }
+            if(tokenType) return createToken(tokenType, this.yyval);
         }else{
             this.error()
         }
@@ -348,10 +344,12 @@ Tokenizer.prototype = {
     // TODO:
     pushState:function(condition){
         this.states.push(condition);
+        this.state = condition;
     },
     // TODO:
     popState:function(){
         this.states.pop();
+        this.state = this.states[this.states.length-1];
     },
     /**
      * [error description]
@@ -373,29 +371,8 @@ Tokenizer.prototype = {
             (message || '. Unrecognized input.') + "\n" + (offset === 0? '':'...') +
             posMessage + "...\n" + new Array(pointer + (offset === 0? 0 : 3) ).join(' ') + new Array(10).join("^");
     }
-   
-
 }
-// 生成actionmap
-// -----------------------------------
-setupRule(RULES, Tokenizer.prototype)
 
 
-var tokenizer = exports.tokenize("@hello: green;\n\n#cda.classname, #abc.m-class:hover(1,3){height:/***/ 80px} @hello")
 
-console.log(tokenizer.lex().type === VARIABLE)
-console.log(tokenizer.lex().type === COLON)
-console.log(tokenizer.lex().type === IDENT)
-console.log(tokenizer.lex().type === SEMICOLON)
-console.log(tokenizer.lex().type === NEWLINE)
-console.log(tokenizer.lex().type === NEWLINE)
-console.log(tokenizer.lex().type === SELECTOR)
-console.log(tokenizer.lex().type === COMMA)
-console.log(tokenizer.lex().type === SELECTOR)
-console.log(tokenizer.lex().type === PARENL)
-console.log(tokenizer.lex().type === IDENT)
-console.log(tokenizer.lex().type === COLON)
-console.log(tokenizer.lex())
-console.log(tokenizer.lex().type === DIMENSION)
-console.log(tokenizer.lex().type === PARENR)
-console.log(exports.inspectToken(PARENR));
+

@@ -1,4 +1,4 @@
-var ness;
+var mcss;
 (function (modules) {
     var cache = {}, require = function (id) {
             var module = cache[id];
@@ -9,18 +9,303 @@ var ness;
             }
             return module.exports;
         };
-    ness = require('0');
+    mcss = require('0');
 }({
     '0': function (require, module, exports, global) {
-        var tokenizer = null;
-        var parser = require('1');
+        var tokenizer = require('1');
+        var parser = require('3');
         exports.tokenizer = tokenizer;
         exports.parser = parser;
     },
     '1': function (require, module, exports, global) {
-        var tk = null, tree = require('2'), color = require('3'), util = require('4');
+        var util = require('2');
+        var slice = [].slice, _uid = 0, debug = true, tokenCache = {};
+        uid = function (type, cached) {
+            _uid++;
+            if (cached) {
+                tokenCache[type] = { type: _uid };
+            }
+            return _uid;
+        }, toAssert = function (str) {
+            var arr = typeof str == 'string' ? str.split(/\s+/) : str, regexp = new RegExp('^(?:' + arr.join('|') + ')$');
+            return function (word) {
+                return regexp.test(word);
+            };
+        }, toAssert2 = util.makePredicate;
+        var tokenizer = module.exports = function (input, options) {
+                return new Tokenizer(input, options);
+            };
+        function createToken(type, val) {
+            if (!val) {
+                tokenCache[type] = { type: type };
+            }
+            var token = tokenCache[type] || {
+                    type: type,
+                    val: val
+                };
+            return token;
+        }
+        var isUnit = toAssert2('% em ex ch rem vw vh vmin vmax cm mm in pt pc px deg grad rad turn s ms Hz kHz dpi dpcm dppx');
+        var isAtKeyWord = toAssert2('keyframe media page import font-face');
+        var isNessKeyWord = toAssert2('mixin extend if each');
+        function atKeyword(val) {
+            if (val === 'keyframe')
+                return createToken(KEYFRAME);
+            return tokenCache[val];
+        }
+        var $rules = [];
+        var $links = {};
+        var addRules = tokenizer.addRules = function (rules) {
+                $rules = $rules.concat(rules);
+                var rule, reg, state, link, retain;
+                for (var i = 0; i < $rules.length; i++) {
+                    rule = $rules[i];
+                    reg = typeof rule.regexp !== 'string' ? String(rule.regexp).slice(1, -1) : rule.regexp;
+                    if (!~reg.indexOf('^(?')) {
+                        rule.regexp = new RegExp('^(?:' + reg + ')');
+                    }
+                    state = rule.state || 'init';
+                    link = $links[state] || ($links[state] = []);
+                    link.push(i);
+                }
+                return this;
+            };
+        addRules([
+            {
+                regexp: /$/,
+                action: function () {
+                    return 'EOF';
+                }
+            },
+            {
+                regexp: /[\n\r\f][ \t]*/,
+                action: function () {
+                    return 'NEWLINE';
+                }
+            },
+            {
+                regexp: /\/\*([^\x00]+)\*\//,
+                action: function (yytext, comment) {
+                    this.yyval = comment;
+                    return 'COMMENT';
+                }
+            },
+            {
+                regexp: /@([-_A-Za-z][-\w]*)/,
+                action: function (yytext, val) {
+                    if (isNessKeyWord(val) || isAtKeyWord(val)) {
+                        return val.toUpperCase();
+                    } else {
+                        this.error('Unrecognized @ word');
+                    }
+                }
+            },
+            {
+                regexp: /([\$_A-Za-z][-\w]*)/,
+                action: function (yytext) {
+                    this.yyval = yytext;
+                    return 'IDENT';
+                }
+            },
+            {
+                regexp: /![ \t]*important/,
+                action: function (yytext) {
+                    return 'IMPORTANT';
+                }
+            },
+            {
+                regexp: /(-?(?:\d+\.\d+|\d+))(\w*)?/,
+                action: function (yytext, val, unit) {
+                    if (unit && !isUnit(unit)) {
+                        this.error('Unexcept unit: "' + unit + '"');
+                    }
+                    this.yyval = {
+                        number: parseFloat(val),
+                        unit: unit
+                    };
+                    return 'DIMENSION';
+                }
+            },
+            {
+                regexp: ':([\\w\\u00A1-\\uFFFF-]+)' + '(?:\\(' + '([^\\(\\)]*' + '|(?:' + '\\([^\\)]+\\)' + '|[^\\(\\)]*' + ')+)' + '\\))?',
+                action: function (yytext) {
+                    this.yyval = yytext;
+                    return 'PSEUDO_CLASS';
+                }
+            },
+            {
+                regexp: /#([-\w\u0080-\uffff]+)/,
+                action: function (yytext, val) {
+                    this.yyval = yytext;
+                    return 'HASH';
+                }
+            },
+            {
+                regexp: /\.([-\w\u0080-\uffff]+)/,
+                action: function (yytext) {
+                    this.yyval = yytext;
+                    return 'CLASS';
+                }
+            },
+            {
+                regexp: /\.([-\w\u0080-\uffff]+)/,
+                action: function (yytext) {
+                    this.yyval = yytext;
+                    return 'CLASS';
+                }
+            },
+            {
+                regexp: /(['"])([^\r\n\f]*)\1/,
+                action: function (yytext, quote, val) {
+                    this.yyval = val.trim();
+                    return 'STRING';
+                }
+            },
+            {
+                regexp: /([{}();,:])[\t ]*/,
+                action: function (yytext, punctuator) {
+                    return punctuator;
+                }
+            },
+            {
+                regexp: /[ \t]*((?:[>=<!]?=)|[-~!+*\/])[ \t]*/,
+                action: function (yytext, op) {
+                    console.log('operator');
+                    return op;
+                }
+            },
+            {
+                regexp: /[ \t]+/,
+                action: function () {
+                    return 'WS';
+                }
+            },
+            {
+                regexp: /[^{\n\r\f,]+/,
+                action: function (yytext) {
+                    this.yyval = yytext;
+                    return 'SELECTOR_SEP';
+                }
+            }
+        ]);
+        function Tokenizer(input, options) {
+            if (input)
+                this.setInput(input, options);
+        }
+        Tokenizer.prototype = {
+            constructor: Tokenizer,
+            setInput: function (input, options) {
+                this.options = options || {};
+                this.input = input.replace('\r\n', '\n');
+                this.remained = this.input;
+                this.length = this.input.length;
+                this.lineno = 1;
+                this.states = ['init'];
+                this.state = 'init';
+                return this;
+            },
+            lex: function () {
+                var token = this.next();
+                if (typeof token !== 'undefined') {
+                    return token;
+                } else {
+                    return this.lex();
+                }
+            },
+            next: function () {
+                var tmp, action, rule, tokenType, lines, state = this.state, rules = $rules, link = $links[state];
+                if (!link)
+                    throw Error('no state: ' + state + ' defined');
+                this.yyval = null;
+                var len = link.length;
+                for (var i = 0; i < len; i++) {
+                    var rule = $rules[link[i]];
+                    tmp = this.remained.match(rule.regexp);
+                    if (tmp)
+                        break;
+                }
+                if (tmp) {
+                    lines = tmp[0].match(/(?:\r\n?|\n).*/g);
+                    if (lines)
+                        this.lineno += lines.length;
+                    action = rule.action;
+                    tokenType = action.apply(this, tmp);
+                    this.remained = this.remained.slice(tmp[0].length);
+                    if (tokenType)
+                        return createToken(tokenType, this.yyval);
+                } else {
+                    this.error();
+                }
+            },
+            pushState: function (condition) {
+                this.states.push(condition);
+                this.state = condition;
+            },
+            popState: function () {
+                this.states.pop();
+                this.state = this.states[this.states.length - 1];
+            },
+            error: function (message, options) {
+                var message = this._traceError(message);
+                var error = new Error(message || 'Lexical error');
+                throw error;
+            },
+            _traceError: function (message) {
+                var matchLength = this.length - this.remained.length;
+                var offset = matchLength - 10;
+                if (offset < 0)
+                    offset = 0;
+                var pointer = matchLength - offset;
+                var posMessage = this.input.slice(offset, offset + 20);
+                return 'Error on line ' + (this.lineno + 1) + ' ' + (message || '. Unrecognized input.') + '\n' + (offset === 0 ? '' : '...') + posMessage + '...\n' + new Array(pointer + (offset === 0 ? 0 : 3)).join(' ') + new Array(10).join('^');
+            }
+        };
+    },
+    '2': function (require, module, exports, global) {
+        exports.makePredicate = function (words) {
+            words = words.split(' ');
+            var f = '', cats = [];
+            out:
+                for (var i = 0; i < words.length; ++i) {
+                    for (var j = 0; j < cats.length; ++j)
+                        if (cats[j][0].length == words[i].length) {
+                            cats[j].push(words[i]);
+                            continue out;
+                        }
+                    cats.push([words[i]]);
+                }
+            function compareTo(arr) {
+                if (arr.length == 1)
+                    return f += 'return str === \'' + arr[0] + '\';';
+                f += 'switch(str){';
+                for (var i = 0; i < arr.length; ++i)
+                    f += 'case \'' + arr[i] + '\':';
+                f += 'return true}return false;';
+            }
+            if (cats.length > 3) {
+                cats.sort(function (a, b) {
+                    return b.length - a.length;
+                });
+                f += 'switch(str.length){';
+                for (var i = 0; i < cats.length; ++i) {
+                    var cat = cats[i];
+                    f += 'case ' + cat[0].length + ':';
+                    compareTo(cat);
+                }
+                f += '}';
+            } else {
+                compareTo(words);
+            }
+            return new Function('str', f);
+        };
+    },
+    '3': function (require, module, exports, global) {
+        var tk = require('1'), tree = require('4'), color = require('5'), util = require('2');
+        var yy = {};
         var isColor = util.makePredicate('aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgrey darkgreen darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray grey green greenyellow honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgrey lightgreen lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen');
-        var isNessAtKeyword = util.makePredicate('if else then end mixin extend css');
+        var isNessAtKeyword = util.makePredicate('mixin extend');
+        var isNessFutureAtKeyword = util.makePredicate('if else then end mixin extend css');
+        module.exports = yy;
         exports.parse = function (input, options) {
             return new Parser().parse(input, options);
         };
@@ -29,57 +314,85 @@ var ness;
         Parser.prototype = {
             parse: function (input, options) {
                 this.tokenizer = tk.tokenize(input, options);
-                this.tokens = [];
+                this.lookahead = null;
                 this.next();
+                this.states = ['accept'];
+                this.state = 'accept';
                 return this.topLevel();
             },
             error: function (msg) {
                 throw Error(msg);
             },
             next: function () {
-                this.token = this.tokenizer.lex();
+                var next = this.tokenizer.lex();
+                this.lookahead = this.tokenizer.lex();
             },
-            advance: function (tokenType, val) {
-                if (this.token.type !== tokenType || val && this.token.val !== val) {
-                    this.error('expect ' + this.tokenizer.inspectToken(tokenType) + ', got the type:' + this.tokenizer.inspectToken(this.token.type));
+            pushState: function (condition) {
+                this.states.push(condition);
+                this.state = condition;
+            },
+            popState: function () {
+                this.states.pop();
+                this.state = this.states[this.states.length - 1];
+            },
+            match: function (tokenType, val) {
+                var ahead = this.ll();
+                if (ahead.type !== tokenType || val !== undefined && ahead.val !== val) {
+                    this.error('at line:' + this.tokenizer.lineno + 'expect:' + tk.inspectToken(tokenType) + '->got: ' + tk.inspectToken(ahead.type));
+                } else {
+                    this.next();
                 }
-                this.next();
+            },
+            ll: function (k) {
+                return this.lookahead;
+            },
+            la: function (k) {
+                return this.lookahead.type;
             },
             ignore: function (tokenType, val) {
-                if (this.token.type !== tokenType || val && this.token.val !== val) {
+                if (this.lookahead.type !== tokenType || val && this.lookahead.val !== val) {
                     this.next();
                 }
             },
             topLevel: function () {
-                var node = new tree.ProgramNode();
-                while (this.token.type !== tk.EOF) {
-                    console.log(tk.inspectToken(this.token.type), tk.EOF);
+                var node = this.node = new tree.ProgramNode();
+                while (this.la(1) !== tk.EOF) {
                     node.body.push(this.stmt());
                 }
                 return node;
             },
             stmt: function () {
-                console.log('stmt');
-                var tokenType = this.token.type;
-                this.next();
+                var tokenType = this.la(1);
+                switch (tokenType) {
+                }
             },
-            rule: function () {
+            declare: function () {
+            },
+            expression: function () {
+                var tokenType = this.la(1);
+            },
+            parenExpression: function () {
+                this.match(tk.parenL);
+                this.parse;
+            },
+            params: function () {
             },
             definition: function () {
             }
         };
-        console.log(exports.parse('@height:80px;'));
     },
-    '2': function (require, module, exports, global) {
-        exports.ProgramNode = function ProgramNode() {
+    '4': function (require, module, exports, global) {
+        exports.ProgramNode = function () {
             this.body = [];
         };
         exports.AssignNode = function () {
         };
         exports.RuleListNode = function () {
         };
+        exports.ExpressionNode = function () {
+        };
     },
-    '3': function (require, module, exports, global) {
+    '5': function (require, module, exports, global) {
         'use strict';
         var Color = module.exports = function () {
                 var str = 'string', Color = function Color(r, g, b, a) {
@@ -437,43 +750,5 @@ var ness;
                 }
             }
         }());
-    },
-    '4': function (require, module, exports, global) {
-        exports.makePredicate = function (words) {
-            words = words.split(' ');
-            var f = '', cats = [];
-            out:
-                for (var i = 0; i < words.length; ++i) {
-                    for (var j = 0; j < cats.length; ++j)
-                        if (cats[j][0].length == words[i].length) {
-                            cats[j].push(words[i]);
-                            continue out;
-                        }
-                    cats.push([words[i]]);
-                }
-            function compareTo(arr) {
-                if (arr.length == 1)
-                    return f += 'return str === \'' + arr[0] + '\';';
-                f += 'switch(str){';
-                for (var i = 0; i < arr.length; ++i)
-                    f += 'case \'' + arr[i] + '\':';
-                f += 'return true}return false;';
-            }
-            if (cats.length > 3) {
-                cats.sort(function (a, b) {
-                    return b.length - a.length;
-                });
-                f += 'switch(str.length){';
-                for (var i = 0; i < cats.length; ++i) {
-                    var cat = cats[i];
-                    f += 'case ' + cat[0].length + ':';
-                    compareTo(cat);
-                }
-                f += '}';
-            } else {
-                compareTo(words);
-            }
-            return new Function('str', f);
-        };
     }
 }));
